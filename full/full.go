@@ -2,6 +2,7 @@ package full
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/filecoin-project/go-jsonrpc/auth"
 	"github.com/gbrlsnchs/jwt/v3"
@@ -37,6 +38,7 @@ func (a *FullNodeAPI) AuthNew(ctx context.Context, perms []auth.Permission) ([]b
 }
 
 func (f *FullNodeAPI) FuncA(ctx context.Context) error {
+	fmt.Println("funcA")
 	return nil
 }
 
