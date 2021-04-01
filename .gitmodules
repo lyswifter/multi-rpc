@@ -1,0 +1,3 @@
+[submodule "extern/go-jsonrpc"]
+	path = extern/go-jsonrpc
+	url = git@github.com:lyswifter/go-jsonrpc.git
