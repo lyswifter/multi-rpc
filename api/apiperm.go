@@ -16,6 +16,6 @@ var DefaultPerms = []auth.Permission{PermRead}
 
 func PermissionedFullAPI(a FullApi) FullApi {
 	var out FullStruct
-	auth.PermissionedProxy(AllPermissions, DefaultPerms, a, &out)
+	auth.PermissionedProxy(AllPermissions, DefaultPerms, a, &out.Internal)
 	return &out
 }

@@ -3,42 +3,28 @@ package full
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/filecoin-project/go-jsonrpc/auth"
-	"github.com/gbrlsnchs/jwt/v3"
 	"github.com/lyswifter/api"
-	"golang.org/x/xerrors"
+	"github.com/lyswifter/jwt"
 )
 
-type jwtPayload struct {
-	Allow []auth.Permission
-}
-
-type APIAlg jwt.HMACSHA
-
 type FullNodeAPI struct {
-	APISecret *APIAlg
+	APISecret *jwt.APIAlg
 }
 
 func (a *FullNodeAPI) AuthVerify(ctx context.Context, token string) ([]auth.Permission, error) {
-	var payload jwtPayload
-	if _, err := jwt.Verify([]byte(token), (*jwt.HMACSHA)(a.APISecret), &payload); err != nil {
-		return nil, xerrors.Errorf("JWT Verification failed: %w", err)
-	}
-
-	return payload.Allow, nil
+	return jwt.AuthVerify(ctx, token, a.APISecret)
 }
 
 func (a *FullNodeAPI) AuthNew(ctx context.Context, perms []auth.Permission) ([]byte, error) {
-	p := jwtPayload{
-		Allow: perms, // TODO: consider checking validity
-	}
-
-	return jwt.Sign(&p, (*jwt.HMACSHA)(a.APISecret))
+	return jwt.AuthNew(ctx, perms, a.APISecret)
 }
 
 func (f *FullNodeAPI) FuncA(ctx context.Context) error {
 	fmt.Println("funcA")
+	time.Sleep(2 * time.Second)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"net"
@@ -9,21 +10,26 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/go-jsonrpc/auth"
+	"github.com/gbrlsnchs/jwt/v3"
+	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/lyswifter/api"
 	"github.com/lyswifter/full"
+	ljwt "github.com/lyswifter/jwt"
 	"github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"golang.org/x/xerrors"
 )
 
 func main() {
+	fmt.Println("main running")
+
 	ipaddr := flag.String("ip", "127.0.0.1", "ip address specify")
 	port := flag.String("port", "1234", "port specify")
 	t := flag.String("type", "server", "node type specify")
-
 	destApi := flag.String("dest", "xxxxx", "destination api info specify")
 
 	flag.Parse()
@@ -34,40 +40,80 @@ func main() {
 			return
 		}
 
-		err = serveRPC(&full.FullNodeAPI{}, ml, 512)
+		pk, err := genLibp2pKey()
+		if err != nil {
+			return
+		}
+
+		kbytes, err := pk.Bytes()
+		if err != nil {
+			return
+		}
+
+		apialg := (*ljwt.APIAlg)(jwt.NewHS256(kbytes))
+		auth, err := ljwt.AuthNew(context.TODO(), api.AllPermissions, apialg)
+		if err != nil {
+			return
+		}
+
+		fmt.Printf("AuthInfo: %s:%s\n", auth, ml.String())
+
+		err = serveRPC(&full.FullNodeAPI{
+			APISecret: apialg,
+		}, ml, 512)
 		if err != nil {
 			return
 		}
 	}
 
-	ainfo := ParseApiInfo(*destApi)
-	addr, err := ainfo.DialArgs()
-	if err != nil {
-		return
-	}
+	if *t == "client" {
+		ainfo := ParseApiInfo(*destApi)
 
-	var res api.FullStruct
-	closer, err := jsonrpc.NewMergeClient(context.TODO(), addr, "MultiRPC",
-		[]interface{}{
-			res,
-		}, ainfo.AuthHeader())
-	if err != nil {
-		return
-	}
+		fmt.Printf("parseApiInfo: %s %s\n", ainfo.Addr, ainfo.Token)
 
-	defer closer()
-
-	var count = 0
-	for count < 100 {
-		count++
-
-		err := res.FuncA(context.TODO())
+		addr, err := ainfo.DialArgs()
 		if err != nil {
-			fmt.Printf("err: %s\n", err.Error())
-			continue
+			fmt.Printf("dial: %s\n", err)
+			return
 		}
 
-		fmt.Printf("FuncA: count: %d\n", count)
+		var res api.FullStruct
+		closer, err := jsonrpc.NewMergeClient(context.TODO(), addr, "MultiRPC",
+			[]interface{}{
+				&res.Internal,
+			}, ainfo.AuthHeader())
+		if err != nil {
+			fmt.Printf("newClient: %s\n", err)
+			return
+		}
+
+		defer closer()
+
+		ticker := time.NewTicker(2)
+		ctx := context.Background()
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Println("Loop")
+
+				err := res.FuncA(context.TODO())
+				if err != nil {
+					fmt.Printf("err: %s\n", err.Error())
+				}
+
+				fmt.Println("FuncA")
+
+				// auth, err := res.AuthNew(context.TODO(), api.AllPermissions)
+				// if err != nil {
+				// 	fmt.Printf("err: %s\n", err.Error())
+				// 	return
+				// }
+
+				// fmt.Printf("auth: %s\n", auth)
+			case <-ctx.Done():
+				fmt.Println("done")
+			}
+		}
 	}
 }
 
@@ -105,6 +151,14 @@ func serveRPC(a api.FullApi, addr multiaddr.Multiaddr, maxRequestSize int64) err
 	}
 
 	return nil
+}
+
+func genLibp2pKey() (crypto.PrivKey, error) {
+	pk, _, err := crypto.GenerateEd25519Key(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return pk, nil
 }
 
 var (

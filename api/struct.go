@@ -7,22 +7,24 @@ import (
 )
 
 type FullStruct struct {
-	AuthNewInner    func(p0 context.Context, p1 []auth.Permission) ([]byte, error) `perm:"admin"`
-	AuthVerifyInner func(p0 context.Context, p1 string) ([]auth.Permission, error) `perm:"read"`
+	Internal struct {
+		AuthNew    func(p0 context.Context, p1 []auth.Permission) ([]byte, error) `perm:"admin"`
+		AuthVerify func(p0 context.Context, p1 string) ([]auth.Permission, error) `perm:"read"`
 
-	FuncInner func(ctx context.Context) error `perm:"read"`
+		FuncA func(ctx context.Context) error `perm:"read"`
+	}
 }
 
 func (s *FullStruct) AuthNew(p0 context.Context, p1 []auth.Permission) ([]byte, error) {
-	return s.AuthNewInner(p0, p1)
+	return s.Internal.AuthNew(p0, p1)
 }
 
 func (s *FullStruct) AuthVerify(p0 context.Context, p1 string) ([]auth.Permission, error) {
-	return s.AuthVerifyInner(p0, p1)
+	return s.Internal.AuthVerify(p0, p1)
 }
 
 func (s *FullStruct) FuncA(ctx context.Context) error {
-	return s.FuncInner(ctx)
+	return s.Internal.FuncA(ctx)
 }
 
 var _ FullApi = new(FullStruct)
