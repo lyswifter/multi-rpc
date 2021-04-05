@@ -3,7 +3,6 @@ package full
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/filecoin-project/go-jsonrpc/auth"
 	"github.com/lyswifter/api"
@@ -24,7 +23,6 @@ func (a *FullNodeAPI) AuthNew(ctx context.Context, perms []auth.Permission) ([]b
 
 func (f *FullNodeAPI) FuncA(ctx context.Context) error {
 	fmt.Println("funcA")
-	time.Sleep(2 * time.Second)
 	return nil
 }
 

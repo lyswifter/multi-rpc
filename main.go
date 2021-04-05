@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"flag"
 	"fmt"
+	mrand "math/rand"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -24,50 +27,159 @@ import (
 	"golang.org/x/xerrors"
 )
 
+type KeyInfo struct {
+	PrivateKey []byte
+}
+
+var random = mrand.New(mrand.NewSource(time.Now().UnixNano() | int64(os.Getpid())))
+
 func main() {
-	fmt.Println("main running")
+	pathname := "AUTH_API_INFO"
 
 	ipaddr := flag.String("ip", "127.0.0.1", "ip address specify")
 	port := flag.String("port", "1234", "port specify")
 	t := flag.String("type", "server", "node type specify")
-	destApi := flag.String("dest", "xxxxx", "destination api info specify")
 
 	flag.Parse()
 
 	if *t == "server" {
-		ml, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%s/http", *ipaddr, *port))
-		if err != nil {
-			return
+		bt, erra := os.ReadFile(pathname)
+		if erra != nil {
+			if os.IsNotExist(erra) {
+				fmt.Printf("file is not exist: %s\n", pathname)
+			}
+
+			if os.IsExist(erra) {
+				fmt.Printf("file is exist: %s\n", pathname)
+			}
 		}
 
-		pk, err := genLibp2pKey()
-		if err != nil {
-			return
+		var targetAddr string
+		var targetKinfo KeyInfo
+		if len(bt) > 0 {
+			bts := strings.Split(string(bt), "\n")
+			for _, addr := range bts {
+				if strings.Contains(addr, *port) {
+					targetAddr = strings.Split(addr, "#")[0]
+
+					tmp := KeyInfo{}
+					erra := json.Unmarshal([]byte(strings.Split(addr, "#")[1]), &tmp)
+					if erra != nil {
+						return
+					}
+
+					targetKinfo = tmp
+					break
+				}
+			}
 		}
 
-		kbytes, err := pk.Bytes()
-		if err != nil {
-			return
+		fmt.Printf("Already targetAddr: %s\n", targetAddr)
+
+		var ml multiaddr.Multiaddr
+		var err error
+		var kbytes []byte
+		if targetAddr != "" && len(targetKinfo.PrivateKey) > 0 {
+			info := ParseApiInfo(targetAddr)
+
+			ml, err = multiaddr.NewMultiaddr(info.Addr)
+			if err != nil {
+				return
+			}
+
+			kbytes = targetKinfo.PrivateKey
+
+			fmt.Printf("already kbytes: %v\n", kbytes)
+		} else {
+			ml, err = multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%s/http", *ipaddr, *port))
+			if err != nil {
+				return
+			}
+
+			pk, err := genLibp2pKey()
+			if err != nil {
+				return
+			}
+
+			kbytes, err = pk.Bytes()
+			if err != nil {
+				return
+			}
+
+			kinfo := KeyInfo{
+				PrivateKey: kbytes,
+			}
+
+			kinfostring, err := json.Marshal(kinfo)
+			if err != nil {
+				return
+			}
+
+			fmt.Printf("newly kbytes: %v\n", kinfo)
+
+			apialg := (*ljwt.APIAlg)(jwt.NewHS256(kbytes))
+			auth, err := ljwt.AuthNew(context.TODO(), api.AllPermissions, apialg)
+			if err != nil {
+				return
+			}
+
+			var f *os.File
+			_, err = os.Stat(pathname)
+			if err != nil {
+				if !os.IsExist(err) {
+					f, err = os.OpenFile(pathname, os.O_CREATE|os.O_RDWR, 0666)
+					if err != nil {
+						return
+					}
+				}
+			} else {
+				f, err = os.OpenFile(pathname, os.O_APPEND|os.O_RDWR, 0666)
+				if err != nil {
+					return
+				}
+				_, err = f.WriteString("\n")
+				if err != nil {
+					return
+				}
+			}
+
+			defer f.Close()
+
+			destStr := fmt.Sprintf("%s:%s#%s", auth, ml.String(), kinfostring)
+			_, err = f.WriteString(destStr)
+			if err != nil {
+				return
+			}
+
+			fmt.Printf("AuthInfo: %s\n", destStr)
 		}
 
 		apialg := (*ljwt.APIAlg)(jwt.NewHS256(kbytes))
-		auth, err := ljwt.AuthNew(context.TODO(), api.AllPermissions, apialg)
-		if err != nil {
-			return
-		}
 
-		fmt.Printf("AuthInfo: %s:%s\n", auth, ml.String())
+		fmt.Println("RPC server is running...")
 
 		err = serveRPC(&full.FullNodeAPI{
 			APISecret: apialg,
 		}, ml, 512)
 		if err != nil {
+			fmt.Printf("serveRPC: %s", err)
 			return
 		}
 	}
 
 	if *t == "client" {
-		ainfo := ParseApiInfo(*destApi)
+		//read all running api info
+		bt, err := os.ReadFile(pathname)
+		if err != nil {
+			return
+		}
+		bts := strings.Split(string(bt), "\n")
+
+		var infos []string
+		for _, s := range bts {
+			infos = append(infos, strings.Split(s, "#")[0])
+		}
+		ainfo := ParseApiInfo(infos[random.Intn(len(infos))])
 
 		fmt.Printf("parseApiInfo: %s %s\n", ainfo.Addr, ainfo.Token)
 
@@ -86,33 +198,26 @@ func main() {
 			fmt.Printf("newClient: %s\n", err)
 			return
 		}
-
 		defer closer()
 
-		ticker := time.NewTicker(2)
-		ctx := context.Background()
+		fmt.Println("RPC client is running...")
+
+		var count = 0
 		for {
-			select {
-			case <-ticker.C:
-				fmt.Println("Loop")
-
-				err := res.FuncA(context.TODO())
-				if err != nil {
-					fmt.Printf("err: %s\n", err.Error())
-				}
-
-				fmt.Println("FuncA")
-
-				// auth, err := res.AuthNew(context.TODO(), api.AllPermissions)
-				// if err != nil {
-				// 	fmt.Printf("err: %s\n", err.Error())
-				// 	return
-				// }
-
-				// fmt.Printf("auth: %s\n", auth)
-			case <-ctx.Done():
-				fmt.Println("done")
+			count++
+			if count > 100 {
+				break
 			}
+			time.Sleep(2 * time.Second)
+
+			fmt.Println("Loop")
+
+			err := res.FuncA(context.TODO())
+			if err != nil {
+				fmt.Printf("FuncA err: %s\n", err.Error())
+			}
+
+			fmt.Println("FuncA ok")
 		}
 	}
 }
