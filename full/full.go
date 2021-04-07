@@ -21,9 +21,9 @@ func (a *FullNodeAPI) AuthNew(ctx context.Context, perms []auth.Permission) ([]b
 	return jwt.AuthNew(ctx, perms, a.APISecret)
 }
 
-func (f *FullNodeAPI) FuncA(ctx context.Context) error {
-	fmt.Println("funcA")
-	return nil
+func (f *FullNodeAPI) FuncA(ctx context.Context, index int) (int, error) {
+	fmt.Printf("funcA idx: %d\n", index)
+	return index, nil
 }
 
 var _ api.FullApi = &FullNodeAPI{}

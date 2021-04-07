@@ -10,5 +10,5 @@ type FullApi interface {
 	AuthVerify(ctx context.Context, token string) ([]auth.Permission, error) //perm:read
 	AuthNew(ctx context.Context, perms []auth.Permission) ([]byte, error)    //perm:admin
 
-	FuncA(ctx context.Context) error
+	FuncA(ctx context.Context, index int) (int, error)
 }

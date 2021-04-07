@@ -175,13 +175,28 @@ func main() {
 		}
 		bts := strings.Split(string(bt), "\n")
 
-		var infos []string
-		for _, s := range bts {
-			infos = append(infos, strings.Split(s, "#")[0])
-		}
-		ainfo := ParseApiInfo(infos[random.Intn(len(infos))])
+		var firstOne string
+		var others []string
+		for i, s := range bts {
+			if i == 0 {
+				firstOne = strings.Split(s, "#")[0]
+				continue
+			}
 
-		fmt.Printf("parseApiInfo: %s %s\n", ainfo.Addr, ainfo.Token)
+			ori := strings.Split(s, "#")[0]
+			ainfo := ParseApiInfo(ori)
+			fmt.Printf("parseApiInfo backup: %s %s\n", ainfo.Addr, ainfo.Token)
+
+			addr, err := ainfo.DialArgs()
+			if err != nil {
+				fmt.Printf("dial: %s\n", err)
+				return
+			}
+			others = append(others, addr)
+		}
+
+		ainfo := ParseApiInfo(firstOne)
+		fmt.Printf("parseApiInfo first: %s %s\n", ainfo.Addr, ainfo.Token)
 
 		addr, err := ainfo.DialArgs()
 		if err != nil {
@@ -193,7 +208,7 @@ func main() {
 		closer, err := jsonrpc.NewMergeClient(context.TODO(), addr, "MultiRPC",
 			[]interface{}{
 				&res.Internal,
-			}, ainfo.AuthHeader())
+			}, ainfo.AuthHeader(), jsonrpc.WithSwitchConnect(others))
 		if err != nil {
 			fmt.Printf("newClient: %s\n", err)
 			return
@@ -208,16 +223,17 @@ func main() {
 			if count > 100 {
 				break
 			}
-			time.Sleep(2 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 
 			fmt.Println("Loop")
 
-			err := res.FuncA(context.TODO())
+			idx, err := res.FuncA(context.TODO(), count)
 			if err != nil {
-				fmt.Printf("FuncA err: %s\n", err.Error())
+				fmt.Printf("FuncA in: %d err: %s\n", count, err.Error())
+				continue
 			}
 
-			fmt.Println("FuncA ok")
+			fmt.Printf("FuncA ok in:%d out:%d\n", count, idx)
 		}
 	}
 }
