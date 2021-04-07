@@ -32,6 +32,13 @@ type KeyInfo struct {
 }
 
 var random = mrand.New(mrand.NewSource(time.Now().UnixNano() | int64(os.Getpid())))
+var AUTH_API_INFO = ""
+
+func init() {
+	if p := os.Getenv("AUTH_API_INFO"); p != "" {
+		AUTH_API_INFO = p
+	}
+}
 
 func main() {
 	pathname := "AUTH_API_INFO"
@@ -174,26 +181,7 @@ func main() {
 			return
 		}
 		bts := strings.Split(string(bt), "\n")
-
-		var firstOne string
-		var others []string
-		for i, s := range bts {
-			if i == 0 {
-				firstOne = strings.Split(s, "#")[0]
-				continue
-			}
-
-			ori := strings.Split(s, "#")[0]
-			ainfo := ParseApiInfo(ori)
-			fmt.Printf("parseApiInfo backup: %s %s\n", ainfo.Addr, ainfo.Token)
-
-			addr, err := ainfo.DialArgs()
-			if err != nil {
-				fmt.Printf("dial: %s\n", err)
-				return
-			}
-			others = append(others, addr)
-		}
+		firstOne := strings.Split(bts[0], "#")[0]
 
 		ainfo := ParseApiInfo(firstOne)
 		fmt.Printf("parseApiInfo first: %s %s\n", ainfo.Addr, ainfo.Token)
@@ -208,7 +196,7 @@ func main() {
 		closer, err := jsonrpc.NewMergeClient(context.TODO(), addr, "MultiRPC",
 			[]interface{}{
 				&res.Internal,
-			}, ainfo.AuthHeader(), jsonrpc.WithSwitchConnect(others))
+			}, ainfo.AuthHeader(), jsonrpc.WithSwitchFile(AUTH_API_INFO))
 		if err != nil {
 			fmt.Printf("newClient: %s\n", err)
 			return
