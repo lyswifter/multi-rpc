@@ -196,7 +196,7 @@ func main() {
 		closer, err := jsonrpc.NewMergeClient(context.TODO(), addr, "MultiRPC",
 			[]interface{}{
 				&res.Internal,
-			}, ainfo.AuthHeader(), jsonrpc.WithSwitchFile(AUTH_API_INFO))
+			}, ainfo.AuthHeader(), jsonrpc.WithSwitchFile(AUTH_API_INFO), jsonrpc.WithClientType("winning"))
 		if err != nil {
 			fmt.Printf("newClient: %s\n", err)
 			return
